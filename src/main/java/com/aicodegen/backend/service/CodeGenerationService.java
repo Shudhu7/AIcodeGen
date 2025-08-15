@@ -10,6 +10,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -26,7 +27,6 @@ public class CodeGenerationService {
     private final GeminiService geminiService;
     private final CodeHistoryRepository codeHistoryRepository;
     
-    @Transactional
     public CodeGenerationResponse generateCode(CodeGenerationRequest request) {
         long startTime = System.currentTimeMillis();
         
@@ -34,15 +34,20 @@ public class CodeGenerationService {
         if (!isValidRequest(request)) {
             String errorMsg = "Invalid request: prompt and language are required";
             log.warn(errorMsg);
-            return CodeGenerationResponse.error(request.getPrompt(), request.getLanguage(), errorMsg, 0L);
+            return CodeGenerationResponse.error(
+                request != null ? request.getPrompt() : null, 
+                request != null ? request.getLanguage() : null, 
+                errorMsg, 
+                0L
+            );
         }
         
         try {
             // Check if Gemini service is properly configured
             if (!geminiService.isConfigured()) {
-                String errorMsg = "Gemini API key not configured. Please set GEMINI_API_KEY environment variable.";
+                String errorMsg = "Gemini API key not configured";
                 log.error(errorMsg);
-                saveHistory(request, null, false, errorMsg, System.currentTimeMillis() - startTime);
+                saveHistoryAsync(request, null, false, errorMsg, System.currentTimeMillis() - startTime);
                 return CodeGenerationResponse.error(request.getPrompt(), request.getLanguage(), errorMsg, System.currentTimeMillis() - startTime);
             }
             
@@ -58,12 +63,12 @@ public class CodeGenerationService {
             if (!StringUtils.hasText(generatedCode)) {
                 String errorMsg = "Generated code is empty or invalid";
                 log.warn(errorMsg);
-                saveHistory(request, null, false, errorMsg, executionTime);
+                saveHistoryAsync(request, null, false, errorMsg, executionTime);
                 return CodeGenerationResponse.error(request.getPrompt(), request.getLanguage(), errorMsg, executionTime);
             }
             
             // Save successful generation to database
-            saveHistory(request, generatedCode, true, null, executionTime);
+            saveHistoryAsync(request, generatedCode, true, null, executionTime);
             
             log.info("Code generation successful in {}ms for language: {}", executionTime, request.getLanguage());
             return CodeGenerationResponse.success(generatedCode, request.getPrompt(), request.getLanguage(), executionTime);
@@ -76,7 +81,7 @@ public class CodeGenerationService {
                       sanitizePromptForLogging(request.getPrompt()), request.getLanguage(), e.getMessage(), e);
             
             // Save failed generation to database
-            saveHistory(request, null, false, errorMessage, executionTime);
+            saveHistoryAsync(request, null, false, errorMessage, executionTime);
             
             return CodeGenerationResponse.error(request.getPrompt(), request.getLanguage(), errorMessage, executionTime);
         }
@@ -95,7 +100,8 @@ public class CodeGenerationService {
         return prompt.length() > 100 ? prompt.substring(0, 100) + "..." : prompt;
     }
     
-    private void saveHistory(CodeGenerationRequest request, String generatedCode, boolean success, String errorMessage, long executionTime) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveHistoryAsync(CodeGenerationRequest request, String generatedCode, boolean success, String errorMessage, long executionTime) {
         try {
             CodeHistory history = new CodeHistory();
             history.setUserPrompt(request.getPrompt());
@@ -127,7 +133,7 @@ public class CodeGenerationService {
     public List<CodeHistory> getRecentHistory(int limit) {
         try {
             if (limit <= 0) limit = 10;
-            if (limit > 100) limit = 100; // Prevent excessive data retrieval
+            if (limit > 100) limit = 100;
             
             Pageable pageable = PageRequest.of(0, limit);
             return codeHistoryRepository.findRecentHistory(pageable);

@@ -31,16 +31,20 @@ public interface CodeHistoryRepository extends JpaRepository<CodeHistory, Long> 
     List<CodeHistory> findRecentHistory(@Param("since") LocalDateTime since);
     
     /**
-     * Find top N recent entries with pagination support
+     * Find top N recent entries with pagination support (RECOMMENDED METHOD)
      */
     @Query("SELECT ch FROM CodeHistory ch ORDER BY ch.createdAt DESC")
     List<CodeHistory> findRecentHistory(Pageable pageable);
     
     /**
-     * Find recent entries with limit (fallback method)
+     * Find recent entries with limit using Spring Data method naming (ALTERNATIVE 1)
      */
-    @Query(value = "SELECT * FROM code_history ORDER BY created_at DESC LIMIT :limit", nativeQuery = true)
-    List<CodeHistory> findTop10ByOrderByCreatedAtDesc(@Param("limit") int limit);
+    List<CodeHistory> findTop10ByOrderByCreatedAtDesc();
+    
+    /**
+     * Find recent entries with limit using Spring Data method naming with dynamic limit (ALTERNATIVE 2)
+     */
+    List<CodeHistory> findTopByOrderByCreatedAtDesc(Pageable pageable);
     
     /**
      * Count successful code generations
