@@ -1,6 +1,7 @@
 package com.aicodegen.backend.controller;
 
 import com.aicodegen.backend.dto.CodeGenerationRequest;
+import com.aicodegen.backend.dto.CodeGenerationResponse;
 import com.aicodegen.backend.service.CodeGenerationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -30,7 +33,7 @@ class CodeGenerationControllerTest {
         mockMvc.perform(get("/api/codegen/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.service").value("AI Code Generator")); // Fixed typo here
+                .andExpect(jsonPath("$.service").value("AI Code Generator"));
     }
 
     @Test
@@ -50,5 +53,29 @@ class CodeGenerationControllerTest {
                 .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.prompt").exists());
+    }
+
+    @Test
+    void testSuccessfulCodeGeneration() throws Exception {
+        // Given
+        CodeGenerationRequest request = new CodeGenerationRequest("Create a simple Java class", "Java");
+        CodeGenerationResponse mockResponse = CodeGenerationResponse.success(
+                "public class Test { }", 
+                "Create a simple Java class", 
+                "Java", 
+                100L
+        );
+        
+        when(codeGenerationService.generateCode(any(CodeGenerationRequest.class)))
+                .thenReturn(mockResponse);
+
+        // When & Then
+        mockMvc.perform(post("/api/codegen")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.generatedCode").value("public class Test { }"))
+                .andExpect(jsonPath("$.language").value("Java"));
     }
 }
