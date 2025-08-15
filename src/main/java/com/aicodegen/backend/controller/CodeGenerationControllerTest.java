@@ -30,7 +30,7 @@ class CodeGenerationControllerTest {
         mockMvc.perform(get("/api/codegen/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
-                .andExpected(jsonPath("$.service").value("AI Code Generator"));
+                .andExpect(jsonPath("$.service").value("AI Code Generator")); // Fixed typo here
     }
 
     @Test
